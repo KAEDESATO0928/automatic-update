@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Carrier Entry Automation</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📋 Carrier Entry</h1>
+      <p class="subtitle">kintone → So-net 自動入力</p>
+    </header>
+
+    <!-- 設定セクション -->
+    <section id="settings-section" class="section">
+      <h2>⚙️ API設定</h2>
+      <div class="form-group">
+        <label for="app-id">kintone アプリID</label>
+        <input type="text" id="app-id" placeholder="例: 123">
+      </div>
+      <div class="form-group">
+        <label for="api-token">APIトークン</label>
+        <input type="password" id="api-token" placeholder="APIトークンを入力">
+        <button type="button" id="toggle-token" class="btn-icon" title="表示/非表示">👁️</button>
+      </div>
+      <button type="button" id="save-settings" class="btn btn-secondary">設定を保存</button>
+      <div id="settings-status" class="status"></div>
+    </section>
+
+    <hr>
+
+    <!-- 実行セクション -->
+    <section id="execution-section" class="section">
+      <h2>🚀 自動入力実行</h2>
+      <div class="form-group">
+        <label for="record-id">レコード番号</label>
+        <input type="text" id="record-id" placeholder="例: 1">
+      </div>
+      <button type="button" id="fetch-data" class="btn btn-primary">データ取得 & 開始</button>
+      <div id="execution-status" class="status"></div>
+    </section>
+
+    <!-- ステータス表示 -->
+    <section id="status-section" class="section">
+      <h2>📊 現在の状態</h2>
+      <div id="current-status">
+        <p><strong>データ:</strong> <span id="data-status">未取得</span></p>
+        <p><strong>ページ:</strong> <span id="page-status">-</span></p>
+        <p><strong>処理:</strong> <span id="process-status">待機中</span></p>
+      </div>
+      <button type="button" id="clear-data" class="btn btn-danger">データをクリア</button>
+    </section>
+
+    <!-- デバッグ（開発時のみ表示） -->
+    <details class="debug-section">
+      <summary>🔧 デバッグ情報</summary>
+      <pre id="debug-output"></pre>
+    </details>
+  </div>
+
+  <script src="popup.js" type="module"></script>
+</body>
+</html>

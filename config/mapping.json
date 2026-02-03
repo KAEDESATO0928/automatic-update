@@ -1,0 +1,202 @@
+{
+  "settings": {
+    "version": "1.0",
+    "description": "Carrier Entry Automation Mapping for So-net",
+    "targetDomain": "signup" 
+  },
+  "pages": [
+    {
+      "pageName": "Page 1: 代理店認証",
+      "urlPattern": "UISST0260",
+      "description": "代理店コードとキャンペーン適用基準日の入力",
+      "mapping": [
+        { "kintoneField": "agency_code", "selector": "#UP1360_agentCd", "type": "text", "description": "代理店コード" },
+        { "kintoneField": "apply_year", "selector": "#UP1370_campaignApplyYear", "type": "text", "description": "適用基準日_年" },
+        { "kintoneField": "apply_month", "selector": "#UP1370_campaignApplyMonth", "type": "text", "description": "適用基準日_月" },
+        { "kintoneField": "apply_date", "selector": "#UP1370_campaignApplyDate", "type": "text", "description": "適用基準日_日" },
+        { "kintoneField": "next_btn_p1", "selector": "#UISST0260_next", "type": "click", "description": "次へ" }
+      ]
+    },
+    {
+      "pageName": "Page 2: エリア判定",
+      "urlPattern": "UISST0040",
+      "description": "電話番号と郵便番号によるエリア確認",
+      "mapping": [
+        { "kintoneField": "tel_1_1", "selector": "#UP1020_telNo1", "type": "text", "description": "電話番号_市外局番" },
+        { "kintoneField": "tel_1_2", "selector": "#UP1020_telNo2", "type": "text", "description": "電話番号_市内局番" },
+        { "kintoneField": "tel_1_3", "selector": "#UP1020_telNo3", "type": "text", "description": "電話番号_加入者番号" },
+        { "kintoneField": "zip_1", "selector": "#UP1020_zipCd1", "type": "text", "description": "郵便番号_前3桁" },
+        { "kintoneField": "zip_2", "selector": "#UP1020_zipCd2", "type": "text", "description": "郵便番号_後4桁" },
+        { "kintoneField": "next_btn_p2", "selector": "#UISST0040_next", "type": "click", "description": "次へ" }
+      ]
+    },
+    {
+      "pageName": "Page 3: プラン選択",
+      "urlPattern": "UISST0070",
+      "description": "kintoneのプランコードに基づいてボタンをクリック",
+      "mapping": [
+        {
+          "kintoneField": "plan_code",
+          "selector": null,
+          "type": "click_by_value",
+          "description": "プラン選択分岐",
+          "valueMap": {
+            "10G_EAST_HOME": "#UP1060Useable_entry_HCOE3101",
+            "10G_EAST_MANSION": "#UP1060Useable_entry_HCOE3201",
+            "10G_WEST_HOME": "#UP1060Useable_entry_HCOW3101",
+            "10G_WEST_MANSION": "#UP1060Useable_entry_HCOW3201",
+            "L_EAST_HOME": "#UP1060Useable_entry_HCOE2301",
+            "L_EAST_MANSION": "#UP1060Useable_entry_HCOE2401",
+            "L_WEST_HOME": "#UP1060Useable_entry_HCOW2301",
+            "L_WEST_MANSION": "#UP1060Useable_entry_HCOW2401",
+            "M_EAST_HOME": "#UP1060Useable_entry_HCOE2101",
+            "M_EAST_MANSION": "#UP1060Useable_entry_HCOE2201",
+            "M_WEST_HOME": "#UP1060Useable_entry_HCOW2101",
+            "M_WEST_MANSION": "#UP1060Useable_entry_HCOW2201",
+            "AU_HOME_ZUTTO": "#UP1060Useable_entry_AUHK0103",
+            "AU_HOME_GIGA": "#UP1060Useable_entry_AUHK0102",
+            "AU_HOME_STD": "#UP1060Useable_entry_AUHK0101",
+            "AU_MANSION_A": "#UP1060Useable_entry_AUHK0202",
+            "AU_MANSION_STD": "#UP1060Useable_entry_AUHK0201"
+          }
+        }
+      ]
+    },
+    {
+      "pageName": "Page 4: 申込区分",
+      "urlPattern": "UISST0146",
+      "description": "新設・転用・事業者変更の選択",
+      "mapping": [
+        {
+          "kintoneField": "contract_type",
+          "selector": null,
+          "type": "click_by_value",
+          "description": "申込区分分岐",
+          "valueMap": {
+            "NEW": "#UP4320_orderKind1",
+            "TENYO": "#UP4320_orderKind2",
+            "CHANGE": "#UP4320_orderKind3"
+          }
+        },
+        { "kintoneField": "next_btn_p4", "selector": "#UISST0146_next", "type": "click", "description": "次へ" }
+      ]
+    },
+    {
+      "pageName": "Page 5: オプション選択",
+      "urlPattern": "UISST0230",
+      "description": "複数オプションの一括選択",
+      "mapping": [
+        {
+          "kintoneField": "options_list",
+          "selector": null,
+          "type": "click_multiple",
+          "description": "オプション配列ループ",
+          "valueMap": {
+            "ANSHIN": "#UP1310_add_option_0_btn",
+            "VALED": "#UP1310_add_option_1_btn",
+            "DATA_RECOVERY": "#UP1310_add_option_2_btn",
+            "SAGIWALL": "#UP1310_add_option_3_btn",
+            "BENEFIT": "#UP1310_add_option_4_btn",
+            "OMAMORI": "#UP1310_add_option_5_btn",
+            "SSAFE": "#UP1310_add_option_6_btn",
+            "ID_KEEPER": "#UP1310_add_option_7_btn",
+            "ROUTER": "#UP1310_add_option_8_btn",
+            "UNEXT": "#UP1310_add_option_9_btn",
+            "TEL": "#UP1310_add_option_10_btn",
+            "TV": "#UP1310_add_option_11_btn"
+          }
+        },
+        { "kintoneField": "next_btn_p5", "selector": "#submit", "type": "click", "description": "次へ" }
+      ]
+    },
+    {
+      "pageName": "Page 6: 入会情報入力",
+      "urlPattern": "UINYU0070",
+      "description": "顧客情報の詳細入力",
+      "mapping": [
+        { "kintoneField": "name_last_kanji", "selector": "#UP2010_usrFamilyNameKnj", "type": "text", "description": "氏名(漢字)_姓" },
+        { "kintoneField": "name_first_kanji", "selector": "#UP2010_usrFirstNameKnj", "type": "text", "description": "氏名(漢字)_名" },
+        { "kintoneField": "name_last_kana", "selector": "#UP2010_usrFamilyNameKana", "type": "text", "description": "氏名(カナ)_セイ" },
+        { "kintoneField": "name_first_kana", "selector": "#UP2010_usrFirstNameKana", "type": "text", "description": "氏名(カナ)_メイ" },
+        {
+          "kintoneField": "gender",
+          "selector": null,
+          "type": "click_by_value",
+          "description": "性別",
+          "valueMap": { "MALE": "#UP2010_sex_0", "FEMALE": "#UP2010_sex_1" }
+        },
+        { "kintoneField": "dob_year", "selector": "#UP2010_birthYearKind_Year", "type": "select", "description": "生年月日_年" },
+        { "kintoneField": "dob_month", "selector": "#UP2010_birthYearKind_Month", "type": "select", "description": "生年月日_月" },
+        { "kintoneField": "dob_day", "selector": "#UP2010_birthYearKind_Day", "type": "select", "description": "生年月日_日" },
+        { "kintoneField": "zip_part1", "selector": "#UP2010_usrAddrZipCd1", "type": "text", "description": "郵便番号_前3桁" },
+        { "kintoneField": "zip_part2", "selector": "#UP2010_usrAddrZipCd2", "type": "text", "description": "郵便番号_後4桁" },
+        { "kintoneField": "pref_code", "selector": "#UP2010_usrAddrPrfct", "type": "select", "description": "都道府県" },
+        { "kintoneField": "city", "selector": "#UP2010_usrAddrCityName", "type": "text", "description": "市区町村" },
+        { "kintoneField": "town", "selector": "#UP2010_usrAddrTownName", "type": "text", "description": "町名・丁目" },
+        { "kintoneField": "chome", "selector": "#UP2010_usrAddrBlock1", "type": "text", "description": "番地" },
+        { "kintoneField": "banchi", "selector": "#UP2010_usrAddrBlock2", "type": "text", "description": "号" },
+        { "kintoneField": "go", "selector": "#UP2010_usrAddrBlock3", "type": "text", "description": "枝番" },
+        { "kintoneField": "building", "selector": "#UP2010_usrAddrBuildingName", "type": "text", "description": "建物名" },
+        { "kintoneField": "room", "selector": "#UP2010_usrAddrRoomNo", "type": "text", "description": "部屋番号" },
+        { "kintoneField": "floor", "selector": "#UP4311_floor", "type": "text", "description": "階数" },
+        { "kintoneField": "tel_1_1", "selector": "#UP2010_telNo1", "type": "text", "description": "連絡先TEL_1" },
+        { "kintoneField": "tel_1_2", "selector": "#UP2010_telNo2", "type": "text", "description": "連絡先TEL_2" },
+        { "kintoneField": "tel_1_3", "selector": "#UP2010_telNo3", "type": "text", "description": "連絡先TEL_3" },
+        {
+          "kintoneField": "contact_same_flag",
+          "selector": "#UP2010_contactTelKbn0",
+          "type": "click",
+          "description": "日中連絡先を同上にする"
+        },
+        {
+          "kintoneField": "copy_address_action",
+          "selector": "#UP4311_copyUserAdrsInfo",
+          "type": "click",
+          "description": "住所コピーボタン"
+        },
+        {
+          "kintoneField": "install_building_type",
+          "selector": "#UP4311_constDwellingform",
+          "type": "select",
+          "description": "設置場所の建物形態 (01:戸建持家, 03:集合分譲 etc)"
+        },
+        {
+          "kintoneField": "current_line_status",
+          "selector": null,
+          "type": "click_by_value",
+          "description": "現在の光回線利用状況",
+          "valueMap": {
+            "NONE": "#UP7050_exist_line_kbn_0",
+            "COLLABO": "#UP7050_exist_line_kbn_1",
+            "OTHER": "#UP7050_exist_line_kbn_2"
+          }
+        },
+        {
+          "kintoneField": "construction_date_type",
+          "selector": null,
+          "type": "click_by_value",
+          "description": "工事希望日区分",
+          "valueMap": {
+            "SHORTEST": "#UP4375_constReqKbn1",
+            "WEEKEND": "#UP4375_constReqKbn2",
+            "DECIDE_LATER": "#UP4375_constReqKbn4"
+          }
+        },
+        { "kintoneField": "next_btn_p6", "selector": "#submit", "type": "click", "description": "次へ" }
+      ]
+    },
+    {
+      "pageName": "Page 7: 最終確認",
+      "urlPattern": "UINYU0050",
+      "description": "内容確認して仮登録SMSを送信",
+      "mapping": [
+        {
+          "kintoneField": "final_action",
+          "selector": "#provisionalRegister",
+          "type": "click",
+          "description": "仮登録(SMS送信)を実行"
+        }
+      ]
+    }
+  ]
+}

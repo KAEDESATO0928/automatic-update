@@ -1,0 +1,22 @@
+{
+  "session_id": "session-1770102129",
+  "started_at": "2026-02-03T07:02:09Z",
+  "cwd": "/c/carrier-entry-extension",
+  "project_name": "carrier-entry-extension",
+  "prompt_seq": 2,
+  "git": {
+    "branch": "(no git)",
+    "uncommitted_changes": 0,
+    "last_commit": "none"
+  },
+  "plans": {
+    "exists": false,
+    "last_modified": 0,
+    "wip_tasks": 0,
+    "todo_tasks": 0,
+    "pending_tasks": 0,
+    "completed_tasks": 0
+  },
+  "changes_this_session": [],
+  "intent": "literal"
+}
