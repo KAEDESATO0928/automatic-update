@@ -9,13 +9,13 @@
 <body>
   <div class="container">
     <header>
-      <h1>📋 Carrier Entry</h1>
+      <h1>Carrier Entry</h1>
       <p class="subtitle">kintone → So-net 自動入力</p>
     </header>
 
     <!-- 設定セクション -->
     <section id="settings-section" class="section">
-      <h2>⚙️ API設定</h2>
+      <h2>API設定</h2>
       <div class="form-group">
         <label for="app-id">kintone アプリID</label>
         <input type="text" id="app-id" placeholder="例: 123">
@@ -23,7 +23,7 @@
       <div class="form-group">
         <label for="api-token">APIトークン</label>
         <input type="password" id="api-token" placeholder="APIトークンを入力">
-        <button type="button" id="toggle-token" class="btn-icon" title="表示/非表示">👁️</button>
+        <button type="button" id="toggle-token" class="btn-icon" title="表示/非表示">Show</button>
       </div>
       <button type="button" id="save-settings" class="btn btn-secondary">設定を保存</button>
       <div id="settings-status" class="status"></div>
@@ -33,18 +33,30 @@
 
     <!-- 実行セクション -->
     <section id="execution-section" class="section">
-      <h2>🚀 自動入力実行</h2>
+      <h2>自動入力実行</h2>
       <div class="form-group">
         <label for="record-id">レコード番号</label>
         <input type="text" id="record-id" placeholder="例: 1">
       </div>
       <button type="button" id="fetch-data" class="btn btn-primary">データ取得 & 開始</button>
       <div id="execution-status" class="status"></div>
+
+      <!-- リアルタイム進捗表示 -->
+      <div id="progress-section" class="progress-section hidden">
+        <div class="progress-header">
+          <span id="progress-page">処理中...</span>
+          <span id="progress-count">0/0</span>
+        </div>
+        <div class="progress-bar">
+          <div id="progress-fill" class="progress-fill"></div>
+        </div>
+        <div id="field-status-list" class="field-status-list"></div>
+      </div>
     </section>
 
     <!-- ステータス表示 -->
     <section id="status-section" class="section">
-      <h2>📊 現在の状態</h2>
+      <h2>現在の状態</h2>
       <div id="current-status">
         <p><strong>データ:</strong> <span id="data-status">未取得</span></p>
         <p><strong>ページ:</strong> <span id="page-status">-</span></p>
@@ -53,13 +65,37 @@
       <button type="button" id="clear-data" class="btn btn-danger">データをクリア</button>
     </section>
 
+    <!-- ログ履歴セクション -->
+    <section id="log-section" class="section">
+      <h2>操作ログ</h2>
+      <div id="log-list" class="log-list">
+        <p class="no-logs">ログがありません</p>
+      </div>
+      <div class="log-actions">
+        <button type="button" id="refresh-logs" class="btn btn-small btn-secondary">更新</button>
+        <button type="button" id="export-logs" class="btn btn-small btn-secondary">エクスポート</button>
+        <button type="button" id="clear-logs" class="btn btn-small btn-danger">クリア</button>
+      </div>
+    </section>
+
     <!-- デバッグ（開発時のみ表示） -->
     <details class="debug-section">
-      <summary>🔧 デバッグ情報</summary>
+      <summary>デバッグ情報</summary>
       <pre id="debug-output"></pre>
     </details>
   </div>
 
-  <script src="popup.js" type="module"></script>
+  <!-- ログ詳細モーダル -->
+  <div id="log-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>ログ詳細</h3>
+        <button type="button" id="close-modal" class="btn-close">&times;</button>
+      </div>
+      <div id="log-details" class="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
 </body>
 </html>
