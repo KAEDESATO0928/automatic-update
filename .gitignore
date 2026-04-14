@@ -1,0 +1,8 @@
+.env
+ET録画/
+__pycache__/
+*.pyc
+page_html/
+screenshots/
+snapshots/
+inspect_*.py
