@@ -465,7 +465,7 @@ def run():
     headless = "--headless" in sys.argv or debug
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=headless, slow_mo=0 if headless else 300)
+        browser = p.firefox.launch(headless=headless, slow_mo=0 if headless else 300)
         context = browser.new_context(viewport={"width": 1400, "height": 1000})
 
         for i, customer in enumerate(customers):
