@@ -269,9 +269,92 @@ def _configure_tv(page: Page, row: dict):
     print("  → 光テレビ設定完了（UISST0230 に戻る）")
 
 
+def step5b_10g_router(page: Page, row: dict):
+    """10Gコース時、UISST0230 の前に挟まる10ギガ対応ルーター選択画面 (UISST0070, form UIOPT4635)"""
+    cur_url = page.url
+    if "UISST0070" not in cur_url:
+        return  # 10Gコース以外はこの画面は出ない
+    print("[5b] 10ギガ対応ルーター画面...")
+    want_wifi7 = row.get("router_wifi7_10g") == "〇"
+    want_10g_wlan = row.get("wireless_lan_10g") == "〇"
+
+    if want_wifi7:
+        # value=1 Wi-Fi7 → 配送先入力あり
+        page.check("#UP9665_nert_apply_ari")
+        time.sleep(0.5)
+        _fill_10g_wifi7_delivery(page, row)
+        print("  ✓ Wi-Fi7対応10ギガルーター + 配送先入力")
+    elif want_10g_wlan:
+        # value=2 10G LAN ルーター → 配送先入力不要
+        page.check("#UP9665_ntrt_apply_ari")
+        print("  ✓ 10ギガ対応無線LANルーターをレンタル")
+    else:
+        # value=0 ご自身で用意
+        page.check("#UP9665_apply_nashi")
+        print("  ✓ ご自身で用意")
+
+    click_and_wait(page, "#UIOPT4635_next")
+
+    # 10ギガ対応ルーター画面は2段階(入力→確認)。確認段階が残ってたら再度決定
+    for _ in range(2):  # 最大2回まで再クリック
+        time.sleep(1)
+        if "UISST0230" in page.url:
+            break  # 通常オプション画面に到達
+        if page.locator("#UIOPT4635_next").count() > 0:
+            print(f"  10Gルーター段階継続 ({page.url}) → 再度決定")
+            click_and_wait(page, "#UIOPT4635_next")
+        else:
+            break
+
+    print("  → 10ギガ対応ルーター選択完了")
+
+
+def _fill_10g_wifi7_delivery(page: Page, row: dict):
+    """UIOPT4635 で Wi-Fi7 選択時の配送先入力 (UP9667_*)"""
+    page.fill("#UP9667_zipCode1", row.get("postal_code1", ""))
+    page.fill("#UP9667_zipCode2", row.get("postal_code2", ""))
+    page.click("#UP9667_searchAddress")
+    time.sleep(1.5)
+
+    town = row.get("town", "")
+    banchi = row.get("banchi", "")
+    go = row.get("go", "")
+    if banchi and go:
+        addr = f"{town}{banchi}-{go}"
+    elif banchi:
+        addr = f"{town}{banchi}"
+    else:
+        addr = town
+    page.fill("#UP9667_town", addr)
+
+    if row.get("building"):
+        page.fill("#UP9667_building", row["building"])
+    if row.get("room"):
+        page.fill("#UP9667_roomNumber", row["room"])
+    page.fill("#UP9667_familyName", row.get("sei", ""))
+    page.fill("#UP9667_firstName", row.get("mei", ""))
+    page.fill("#UP9667_tel1", row.get("phone1", ""))
+    page.fill("#UP9667_tel2", row.get("phone2", ""))
+    page.fill("#UP9667_tel3", row.get("phone3", ""))
+    # 連絡先電話番号 (緊急) — Wi-Fi7選択時は必須
+    page.fill("#UP9667_telEmrg1", row.get("phone1", ""))
+    page.fill("#UP9667_telEmrg2", row.get("phone2", ""))
+    page.fill("#UP9667_telEmrg3", row.get("phone3", ""))
+
+
 def step6_option_service(page: Page, row: dict):
     """オプションサービス: 光電話 → 一括選択 → 詳細画面で個別チェック → 決定"""
     print("[6/9] オプションサービス選択中...")
+    print(f"  current URL: {page.url}")
+
+    # 1Gは UISST0230、10Gは UIOPT4635 で同じ form id="UISST0230" を持つ
+    if "UISST0230" not in page.url and "UIOPT4635" not in page.url:
+        page_id = page.url.rsplit("/", 1)[-1].split(".")[0]
+        _save_page_html(page, f"unknown_{page_id}")
+        screenshot(page, f"unknown_{page_id}")
+        print(f"  ⏸ 想定外URL ({page.url}): HTML保存して停止")
+        page.wait_for_event("close", timeout=0)
+        return
 
     # === 光電話 (NTEL) ===
     phone_apply = row.get("phone_apply", "")
@@ -283,8 +366,9 @@ def step6_option_service(page: Page, row: dict):
     if tv_apply and tv_apply != "申込なし":
         _configure_tv(page, row)
 
-    # === v6プラス対応ルーター (JPRT) ===
-    if row.get("router_v6plus_1g") == "〇" or row.get("router_wifi7_10g") == "〇":
+    # === v6プラス対応ルーター (JPRT) — 1G のみ ===
+    # 10G のルーター/Wi-Fi7 は step5b で既に処理済み
+    if row.get("router_v6plus_1g") == "〇":
         _configure_router(page, row)
 
     # === 設定不要オプション（シンプル9個） ===
@@ -312,35 +396,33 @@ def step6_option_service(page: Page, row: dict):
 def step7_option_next(page: Page, row: dict):
     """オプション確認 → 次のページへ進む"""
     print("[7/9] オプション確認 → 次へ...")
-    # name="submit" の submit ボタンを探す。複数 #submit があり得るので name 指定
-    # JSF対応のためまずは form 送信を試みる
-    submit_count = page.evaluate("document.getElementsByName('submit').length")
-    print(f"  name='submit' の要素数: {submit_count}")
-    page.evaluate("""
-        (function() {
-            var btns = document.getElementsByName('submit');
-            for (var i = 0; i < btns.length; i++) {
-                if (btns[i].id === 'submit' || btns[i].type === 'submit') {
-                    btns[i].click();
-                    return true;
-                }
-            }
-            return false;
-        })()
-    """)
-    time.sleep(2)
-    page.wait_for_load_state("networkidle")
-    page.wait_for_load_state("domcontentloaded")
-    time.sleep(3)
-    # 進めたか検証: URL や fragment を確認
-    cur_url = page.url
-    print(f"  現在URL: {cur_url}")
-    print("  → 次のページへ進んだ")
+    page.click("#submit", force=True)
+    # 入会情報入力ページの姓フィールドが出現するまで待つ（URL不変でも判定可能）
+    try:
+        page.wait_for_selector("#UP2010_usrFamilyNameKnj", timeout=20000)
+        print("  → 次のページへ進んだ")
+    except Exception:
+        page_id = page.url.rsplit("/", 1)[-1].split(".")[0]
+        _save_page_html(page, f"step7_stuck_{page_id}")
+        screenshot(page, f"07_stuck_{page_id}")
+        print(f"  ⏸ 次のページへ進めず HTML保存して停止")
+        page.wait_for_event("close", timeout=0)
 
 
 def step8_member_info(page: Page, row: dict):
     """入会情報入力"""
     print("[8/9] 入会情報入力中...")
+    print(f"  URL: {page.url}")
+    # ID存在チェック
+    has_sei_field = page.locator("#UP2010_usrFamilyNameKnj").count()
+    print(f"  #UP2010_usrFamilyNameKnj 要素数: {has_sei_field}")
+    if has_sei_field == 0:
+        page_id = page.url.rsplit("/", 1)[-1].split(".")[0]
+        _save_page_html(page, f"step8_unknown_{page_id}")
+        screenshot(page, f"08_unknown_{page_id}")
+        print(f"  ⏸ 想定外の入会情報ページ HTML保存して停止")
+        page.wait_for_event("close", timeout=0)
+        return
 
     # お名前
     page.fill("#UP2010_usrFamilyNameKnj", row["sei"])
@@ -650,6 +732,7 @@ def process_customer(page: Page, row: dict, debug: bool = False):
     step3_area_input(page, row)
     step4_course_select(page, row)
     step5_line_application(page, row)
+    step5b_10g_router(page, row)
     step6_option_service(page, row)
     step7_option_next(page, row)
     if debug:

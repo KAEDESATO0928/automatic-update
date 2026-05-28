@@ -21,13 +21,25 @@ BUILDING_MAP = {
     ("集合住宅", "賃貸"): "集合住宅(賃貸)",
 }
 
-# 申込プラン → So-net フォームの course
-COURSE_MAP = {
-    "so-net光Mプラン（新規開設・戸建て）": "So-net光M_戸建_西日本",
-    "so-net光Mプラン（新規開設・MS）": "So-net光M_マンション_西日本",
-    "so-net光10ギガプラン（新規開設・戸建て）": "So-net光10G_戸建_西日本",
-    "so-net光10ギガプラン（新規開設・MS）": "So-net光10G_マンション_西日本",
+# 申込プラン → コース基本部分（戸建/マンション）。東西は住所から後付け
+COURSE_BASE_MAP = {
+    "so-net光Mプラン（新規開設・戸建て）": "So-net光M_戸建",
+    "so-net光Mプラン（新規開設・MS）": "So-net光M_マンション",
+    "so-net光10ギガプラン（新規開設・戸建て）": "So-net光10G_戸建",
+    "so-net光10ギガプラン（新規開設・MS）": "So-net光10G_マンション",
 }
+
+# NTT東日本エリア（北海道、東北、関東、信越、山梨）
+EAST_PREFS = {
+    "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県",
+    "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県",
+    "新潟県", "長野県", "山梨県",
+}
+
+
+def determine_east_west(pref: str) -> str:
+    """都道府県名 → 東日本 / 西日本"""
+    return "東日本" if pref in EAST_PREFS else "西日本"
 
 # 設定不要オプション: So-netコード → kintone fieldCode
 # 値が「〇」なら申込、それ以外は未申込
@@ -73,6 +85,18 @@ PHONE_SERVICE_MAP = {
 def map_phone_service(value: str) -> str:
     """現在の電話サービス kintone値 → So-netコード(未マッチはW999)"""
     return PHONE_SERVICE_MAP.get((value or "").strip(), "W999")
+
+
+def extract_agency_code(record: dict) -> str:
+    """キャンペーンコード新（label: 商品名：6桁コード）から6桁を抽出。
+    未設定なら文字列__1行__36（旧 代理店コードフィールド）にフォールバック。"""
+    campaign = _v(record.get("キャンペーンコード"))
+    if campaign:
+        # 「Tアシ1G標準：66EE14」 → 66EE14 を抽出（半角:も全角：も対応）
+        m = re.search(r"[:：]\s*([A-Z0-9]{6})\s*$", campaign)
+        if m:
+            return m.group(1)
+    return _v(record.get("文字列__1行__36"))
 
 PREFS = (
     "北海道|青森県|岩手県|宮城県|秋田県|山形県|福島県|"
@@ -128,10 +152,11 @@ def map_building_type(dwelling: str, ownership: str) -> str:
     return BUILDING_MAP[key]
 
 
-def map_course(plan: str) -> str:
-    if plan not in COURSE_MAP:
+def map_course(plan: str, pref: str = "") -> str:
+    """申込プラン + 都道府県 → So-net フォームの course (東/西を住所から判定)"""
+    if plan not in COURSE_BASE_MAP:
         raise MapError(f"未対応の申込プラン: {plan!r}")
-    return COURSE_MAP[plan]
+    return f"{COURSE_BASE_MAP[plan]}_{determine_east_west(pref)}"
 
 
 def split_address(addr: str) -> dict:
@@ -193,11 +218,32 @@ def collect_simple_options(record: dict) -> list[str]:
     return selected
 
 
+def _validate_consistency(record: dict):
+    """kintoneレコード内の矛盾チェック（So-net側で弾かれる組合せを事前検出）"""
+    phone_apply = _v(record.get("ドロップダウン_0"))
+    wlan_1g = _v(record.get("ドロップダウン_32"))
+    wlan_10g = _v(record.get("ドロップダウン_57"))
+    # 無線LANカードは光電話の付属サービス → 光電話なしでは申込不可
+    if phone_apply in ("", "申込なし"):
+        if wlan_1g == "〇":
+            raise MapError(
+                "矛盾: 光電話=申込なし のとき【1G限定】無線LANカード=〇 は不可\n"
+                "→ 光電話を申し込むか、無線LANカードを × にしてください"
+            )
+        if wlan_10g == "〇":
+            raise MapError(
+                "矛盾: 光電話=申込なし のとき【10G限定】10ギガ対応無線LANルーター=〇 は不可\n"
+                "→ 光電話を申し込むか、無線LANルーターを × にしてください"
+            )
+
+
 def build_customer(record: dict) -> dict:
     """kintone レコード(JSON) → customer dict 変換"""
     apply_type_raw = _v(record.get("文字列__1行__32"))
     if apply_type_raw not in SHINSETSU_ALIASES:
         raise MapError(f"未対応の申込区分: {apply_type_raw!r}（新設のみ対応）")
+
+    _validate_consistency(record)
 
     by, bm, bd = split_birth(_v(record.get("文字列__1行__19")))
     p1, p2, p3 = split_phone(_v(record.get("文字列__1行__6")))
@@ -207,13 +253,13 @@ def build_customer(record: dict) -> dict:
     )
     addr_raw = _v(record.get("文字列__1行__11"))
     addr = split_address(addr_raw)
-    course = map_course(_v(record.get("申込みプラン")))
+    course = map_course(_v(record.get("申込みプラン")), addr.get("pref", ""))
     line_type = map_line_type(_v(record.get("ドロップダウン_4")))
 
     today = date.today()
 
     return {
-        "agency_code": _v(record.get("文字列__1行__36")),
+        "agency_code": extract_agency_code(record),
         "sei": _v(record.get("旧契約者姓_漢字")),
         "mei": _v(record.get("旧契約者名_漢字")),
         "sei_kana": _v(record.get("旧契約者姓_カナ")),

@@ -1,0 +1,21 @@
+Windows Registry Editor Version 5.00
+
+; apclo-sonet:// URLスキーム登録
+; ダブルクリックして「はい」で実行（HKCU配下なので管理者権限不要）
+;
+; 配置前提:
+;   - python.exe: C:\Users\owner\AppData\Local\Microsoft\WindowsApps\python.exe
+;   - main.py:    C:\AUTOET\automatic-update\main.py
+;
+; 環境が異なる場合はパスを編集してください
+
+[HKEY_CURRENT_USER\Software\Classes\apclo-sonet]
+@="URL:apclo Sonet RPA Protocol"
+"URL Protocol"=""
+
+[HKEY_CURRENT_USER\Software\Classes\apclo-sonet\shell]
+
+[HKEY_CURRENT_USER\Software\Classes\apclo-sonet\shell\open]
+
+[HKEY_CURRENT_USER\Software\Classes\apclo-sonet\shell\open\command]
+@="\"C:\\Users\\owner\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe\" \"C:\\AUTOET\\automatic-update\\main.py\" \"%1\""
