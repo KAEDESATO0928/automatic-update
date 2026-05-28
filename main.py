@@ -2,9 +2,13 @@ import csv
 import os
 import sys
 import time
+import traceback
 
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, Page
+
+import kintone_client
+import record_mapper
 
 load_dotenv()
 
@@ -113,13 +117,194 @@ def step5_line_application(page: Page, row: dict):
     print(f"  → 回線種別選択完了: {apply_type}")
 
 
+def _save_page_html(page: Page, name: str):
+    """ページHTMLを page_html/ に保存（デバッグ用）"""
+    os.makedirs("page_html", exist_ok=True)
+    path = os.path.join("page_html", f"{name}.html")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(page.content())
+    print(f"  HTML saved: {path}")
+
+
+# 光電話プラン: kintone値 → So-net radio value
+PHONE_PLAN_MAP = {
+    "基本プラン": "810200",
+    "セットプラン": "810201",
+}
+
+# 光電話 付加サービス: kintoneのチェック値 → So-netのcheckboxインデックス
+PHONE_OPTION_INDEX = {
+    "発信者番号表示サービス": 0,
+    "ナンバーリクエスト": 1,
+    "通話中着信サービス": 2,
+    "着信転送サービス": 3,
+    "着信拒否サービス": 4,
+    "着信お知らせメール": 5,
+    "ダブルチャネル": 6,
+    "マイナンバー": 7,
+}
+
+
+def _configure_phone(page: Page, row: dict):
+    """UIOPT4100 (光電話設定画面) の入力"""
+    phone_apply = row.get("phone_apply", "")
+    print(f"  光電話申込: {phone_apply}")
+
+    # NTEL 「選択する」ボタンで UIOPT4100 へ遷移
+    page.evaluate("UP1310_addOption('NTEL')")
+    page.wait_for_load_state("networkidle")
+    time.sleep(1)
+    _save_page_html(page, "phone_config")
+
+    # 申込種別: 「利用していない（新規申込）」を選択
+    page.check("#UP9700_orderKind1")
+    time.sleep(0.5)  # JS で displayTarget が表示されるのを待つ
+
+    # プラン選択
+    plan = row.get("phone_plan", "基本プラン")
+    plan_value = PHONE_PLAN_MAP.get(plan, "810200")
+    page.evaluate(
+        f"document.querySelector('input[name=\"UP9170_NTEL01\"][value=\"{plan_value}\"]').click()"
+    )
+    print(f"    ✓ プラン: {plan} (value={plan_value})")
+
+    # 付加サービス（複数チェック）
+    phone_options = row.get("phone_options", [])
+    for opt in phone_options:
+        idx = PHONE_OPTION_INDEX.get(opt)
+        if idx is None:
+            print(f"    ⚠ 未対応の付加サービス: {opt}")
+            continue
+        page.check(f"#UP9170_selectOptionName_check_2_{idx}")
+        print(f"    ✓ 付加サービス: {opt} (check_2_{idx})")
+
+    # 番号取得方法
+    if phone_apply == "番ポあり":
+        page.check("#UP9720_portabilityFlg2")  # value=1 番号ポータビリティ
+        print("    ✓ 番号取得方法: 番号ポータビリティ")
+    else:  # 新規発番
+        page.check("#UP9720_portabilityFlg1")  # value=0 新規採番
+        print("    ✓ 番号取得方法: 新規採番")
+
+    # 決定 → UISST0230 (option select) に戻る、カートに光電話が入った状態
+    click_and_wait(page, "#UIOPT4100_next")
+    time.sleep(1)
+    print("  → 光電話設定完了（UISST0230 に戻る）")
+
+
+def _configure_router(page: Page, row: dict):
+    """UIOPT0030 (v6プラス対応ルーター設定画面) 配送先=契約者と同じ前提で記入"""
+    print("  v6プラス対応ルーター 申込: 〇")
+
+    # JPRT 「選択する」ボタンで UIOPT0030 へ遷移
+    page.evaluate("UP1310_addOption('JPRT')")
+    page.wait_for_load_state("networkidle")
+    time.sleep(1)
+
+    # 配送先郵便番号
+    page.fill("#UP9650_zipCode1", row.get("postal_code1", ""))
+    page.fill("#UP9650_zipCode2", row.get("postal_code2", ""))
+    # 郵便番号から検索ボタンで都道府県・市区町村を自動補完
+    page.click("#UP9650_searchAddress")
+    time.sleep(1.5)
+    print("    ✓ 郵便番号検索で都道府県/市区町村自動補完")
+
+    # 町名・番地（kintoneの分割結果を結合）
+    town = row.get("town", "")
+    banchi = row.get("banchi", "")
+    go = row.get("go", "")
+    if banchi and go:
+        section = f"{town}{banchi}-{go}"
+    elif banchi:
+        section = f"{town}{banchi}"
+    else:
+        section = town
+    page.fill("#UP9650_section", section)
+    print(f"    ✓ 配送先町名: {section}")
+
+    # 建物名、部屋番号
+    if row.get("building"):
+        page.fill("#UP9650_building", row["building"])
+    if row.get("room"):
+        page.fill("#UP9650_roomNumber", row["room"])
+
+    # 氏名
+    page.fill("#UP9650_lastName", row.get("sei", ""))
+    page.fill("#UP9650_firstName", row.get("mei", ""))
+
+    # 配送先電話番号
+    page.fill("#UP9650_tel1", row.get("phone1", ""))
+    page.fill("#UP9650_tel2", row.get("phone2", ""))
+    page.fill("#UP9650_tel3", row.get("phone3", ""))
+
+    # 連絡先電話番号
+    page.fill("#UP9650_contactTel1", row.get("phone1", ""))
+    page.fill("#UP9650_contactTel2", row.get("phone2", ""))
+    page.fill("#UP9650_contactTel3", row.get("phone3", ""))
+
+    # 決定
+    click_and_wait(page, "#UIOPT0030_next")
+    time.sleep(1)
+    print("  → ルーター設定完了（UISST0230 に戻る）")
+
+
+def _configure_tv(page: Page, row: dict):
+    """UIOPT4110 (光テレビ設定画面) の入力。新規申込/継続利用どちらも同じ操作"""
+    tv_apply = row.get("tv_apply", "")
+    print(f"  光テレビ申込: {tv_apply}")
+
+    # NTTV 「選択する」ボタンで UIOPT4110 へ遷移
+    page.evaluate("UP1310_addOption('NTTV')")
+    page.wait_for_load_state("networkidle")
+    time.sleep(1)
+
+    # 申込種別: 「利用していない（新規申込）」を選択（ラジオは1個のみ）
+    page.check("#UP9700_orderKind1")
+    time.sleep(0.5)
+    print("    ✓ 申込種別: 利用していない（新規申込）")
+
+    # 決定
+    click_and_wait(page, "#UIOPT4110_next")
+    time.sleep(1)
+    print("  → 光テレビ設定完了（UISST0230 に戻る）")
+
+
 def step6_option_service(page: Page, row: dict):
-    """オプションサービス: 一括選択 → 決定"""
+    """オプションサービス: 光電話 → 一括選択 → 詳細画面で個別チェック → 決定"""
     print("[6/9] オプションサービス選択中...")
-    # 入力項目無しオプション一括選択
+
+    # === 光電話 (NTEL) ===
+    phone_apply = row.get("phone_apply", "")
+    if phone_apply and phone_apply != "申込なし":
+        _configure_phone(page, row)
+
+    # === 光テレビ (NTTV) ===
+    tv_apply = row.get("tv_apply", "")
+    if tv_apply and tv_apply != "申込なし":
+        _configure_tv(page, row)
+
+    # === v6プラス対応ルーター (JPRT) ===
+    if row.get("router_v6plus_1g") == "〇" or row.get("router_wifi7_10g") == "〇":
+        _configure_router(page, row)
+
+    # === 設定不要オプション（シンプル9個） ===
+    # 「入力項目無しオプション一括選択」ボタンで option_detail へ遷移
     click_and_wait(page, "#UP1500_option_select")
 
-    # オプション詳細画面で決定（デフォルト選択のまま）
+    selected = row.get("simple_options", [])
+    if selected:
+        print(f"  申込オプション: {selected}")
+        for code in selected:
+            idx = record_mapper.SO_NET_CHECKBOX_INDEX.get(code)
+            if idx is None:
+                print(f"  ⚠ 未対応オプションコード: {code}")
+                continue
+            selector = f"#UP3020_checked_{idx}"
+            page.check(selector)
+            print(f"    ✓ {code} → {selector}")
+    else:
+        print("  申込オプションなし")
+
     click_and_wait(page, "#UIOPT0100_next")
     print("  → オプションサービス選択完了")
 
@@ -127,7 +312,29 @@ def step6_option_service(page: Page, row: dict):
 def step7_option_next(page: Page, row: dict):
     """オプション確認 → 次のページへ進む"""
     print("[7/9] オプション確認 → 次へ...")
-    click_and_wait(page, "#submit")
+    # name="submit" の submit ボタンを探す。複数 #submit があり得るので name 指定
+    # JSF対応のためまずは form 送信を試みる
+    submit_count = page.evaluate("document.getElementsByName('submit').length")
+    print(f"  name='submit' の要素数: {submit_count}")
+    page.evaluate("""
+        (function() {
+            var btns = document.getElementsByName('submit');
+            for (var i = 0; i < btns.length; i++) {
+                if (btns[i].id === 'submit' || btns[i].type === 'submit') {
+                    btns[i].click();
+                    return true;
+                }
+            }
+            return false;
+        })()
+    """)
+    time.sleep(2)
+    page.wait_for_load_state("networkidle")
+    page.wait_for_load_state("domcontentloaded")
+    time.sleep(3)
+    # 進めたか検証: URL や fragment を確認
+    cur_url = page.url
+    print(f"  現在URL: {cur_url}")
     print("  → 次のページへ進んだ")
 
 
@@ -335,11 +542,18 @@ def step8_member_info(page: Page, row: dict):
     # 工事希望日: 取得可能な最短の工事日を希望する
     page.evaluate("document.getElementById('UP4375_constReqKbn1').click()")
 
-    # 無線LANカード: チェック済みなら外す
-    page.evaluate("""(function() {
+    # 無線LANカード: kintone値で制御 (〇=チェック / それ以外=外す)
+    want_wlan = (row.get("wireless_lan_card_1g") == "〇") or (row.get("wireless_lan_10g") == "〇")
+    page.evaluate(f"""(function() {{
         var cb = document.getElementById('UP4350_wirelessLan');
-        if (cb && cb.checked) cb.click();
-    })()""")
+        if (!cb) return;
+        if ({str(want_wlan).lower()}) {{
+            if (!cb.checked) cb.click();
+        }} else {{
+            if (cb.checked) cb.click();
+        }}
+    }})()""")
+    print(f"  ✓ 無線LANカード: {'申込' if want_wlan else '未申込'}")
 
     # 利用場所住所セクションの値をテキストで出力
     addr_values = page.evaluate("""
@@ -441,6 +655,9 @@ def process_customer(page: Page, row: dict, debug: bool = False):
     if debug:
         screenshot(page, "07_before_member_info")
     step8_member_info(page, row)
+    # 番ポありなら portability セクションを追加入力
+    if row.get("phone_apply") == "番ポあり":
+        step8b_portability(page, row)
     if debug:
         screenshot(page, "08_after_member_info")
     step9_to_confirmation(page)
@@ -448,7 +665,130 @@ def process_customer(page: Page, row: dict, debug: bool = False):
         screenshot(page, "09_confirmation")
 
 
-def run():
+def step8b_portability(page: Page, row: dict):
+    """番号ポータビリティ詳細入力（step8 member_info 画面の追加セクション）"""
+    print("[8b/9] 番ポ詳細入力中...")
+
+    # 注意事項確認
+    page.check("#UP4315_banpoConfirmAgreement")
+    print("  ✓ 注意事項確認")
+
+    # 電話番号を3-3-4分割（固定電話想定）
+    import re as _re
+    raw = _re.sub(r"\D", "", row.get("phone_existing_no", "") or "")
+    if len(raw) == 11 and raw[:3] in ("070", "080", "090"):
+        p1, p2, p3 = raw[:3], raw[3:7], raw[7:11]
+    elif len(raw) >= 10:
+        p1, p2, p3 = raw[:3], raw[3:6], raw[6:10]
+    else:
+        p1, p2, p3 = raw[:3], raw[3:6], raw[6:]
+    page.fill("#UP4315_banpoTelNo1", p1)
+    page.fill("#UP4315_banpoTelNo2", p2)
+    page.fill("#UP4315_banpoTelNo3", p3)
+    print(f"  ✓ 電話番号: {p1}-{p2}-{p3}")
+
+    # 電話サービス
+    svc_code = record_mapper.map_phone_service(row.get("phone_existing_carrier", ""))
+    page.select_option("#UP4315_telSrvcCd", svc_code)
+    print(f"  ✓ 電話サービス: {row.get('phone_existing_carrier', '')!r} → {svc_code}")
+
+    # 契約者名（固定電話名義人）— 自動補完値を上書き
+    page.fill("#UP4315_telContractNamej1", row.get("phone_existing_name_kanji", ""))
+    page.fill("#UP4315_telContractNamek1", row.get("phone_existing_name_kana", ""))
+    print(f"  ✓ 契約者名: {row.get('phone_existing_name_kanji', '')} / {row.get('phone_existing_name_kana', '')}")
+    print("  → 番ポ詳細入力完了")
+
+
+def _show_error(title: str, message: str):
+    """エラー表示: tkinterダイアログが使えなければprintのみ"""
+    print(f"\n[ERROR] {title}: {message}", file=sys.stderr)
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror(title, message)
+        root.destroy()
+    except Exception:
+        pass
+
+
+def _drive_one_customer(customer: dict, debug: bool = False):
+    """1顧客を Firefox で処理してブラウザクローズまで待つ"""
+    if not LOGIN_ID or not PASSWORD:
+        _show_error("認証情報不足", ".env に SONET_LOGIN_ID と SONET_PASSWORD を設定してください。")
+        return
+
+    with sync_playwright() as p:
+        browser = p.firefox.launch(headless=False, slow_mo=300)
+        context = browser.new_context(viewport={"width": 1400, "height": 1000})
+        page = context.new_page()
+        try:
+            print(f"\n{'='*50}")
+            print(f"顧客: {customer.get('sei','')} {customer.get('mei','')}")
+            print(f"{'='*50}")
+            process_customer(page, customer, debug=debug)
+            print("\nブラウザで確認画面を確認してください。")
+            print("タブ/ブラウザを閉じると処理を終了します。")
+            page.wait_for_event("close", timeout=0)
+        except Exception as e:
+            print(f"\nエラーが発生しました: {e}")
+            traceback.print_exc()
+            if debug:
+                try:
+                    screenshot(page, "error")
+                except Exception:
+                    pass
+            # ブラウザは閉じず操作者の判断に委ねる
+            try:
+                page.wait_for_event("close", timeout=0)
+            except Exception:
+                pass
+        finally:
+            try:
+                browser.close()
+            except Exception:
+                pass
+
+
+def run_with_url(url: str, debug: bool = False):
+    """apclo-sonet://run?app=X&record=Y を受けて kintone→Firefox 実行"""
+    print(f"URL受信: {url}")
+    try:
+        app_id, record_id = record_mapper.parse_url(url)
+    except record_mapper.MapError as e:
+        _show_error("URLパース失敗", str(e))
+        return
+
+    subdomain = os.getenv("KINTONE_SUBDOMAIN")
+    token = os.getenv("KINTONE_API_TOKEN")
+    if not subdomain or not token:
+        _show_error("kintone設定不足", ".env に KINTONE_SUBDOMAIN / KINTONE_API_TOKEN を設定してください。")
+        return
+
+    print(f"kintone取得: app={app_id}, record={record_id}")
+    client = kintone_client.KintoneClient(subdomain, token)
+    try:
+        record = client.get_record(app_id, record_id)
+    except kintone_client.KintoneError as e:
+        _show_error("kintone取得失敗", str(e))
+        return
+
+    try:
+        customer = record_mapper.build_customer(record)
+    except record_mapper.MapError as e:
+        _show_error("レコード変換失敗", str(e))
+        return
+
+    print("[変換後 customer dict]")
+    for k, v in customer.items():
+        print(f"  {k}: {v!r}")
+
+    _drive_one_customer(customer, debug=debug)
+
+
+def run_with_csv():
+    """customer_data.csv モード (旧仕様、後方互換)"""
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     csv_path = args[0] if args else "customer_data.csv"
     customers = load_customers(csv_path)
@@ -480,7 +820,6 @@ def run():
                 if headless:
                     print("\n処理完了（headlessモード）")
                 else:
-                    # ブラウザ表示モード: タブを閉じるまで待機
                     print("\nブラウザで確認画面を確認してください。")
                     print("タブを閉じると次の顧客に進みます。")
                     page.wait_for_event("close", timeout=0)
@@ -494,6 +833,16 @@ def run():
 
         browser.close()
     print("\n全顧客の処理が完了しました。")
+
+
+def run():
+    """エントリポイント: argv[1] が apclo-sonet:// で始まるか判定して分岐"""
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    debug = "--debug" in sys.argv
+    if args and args[0].startswith("apclo-sonet://"):
+        run_with_url(args[0], debug=debug)
+    else:
+        run_with_csv()
 
 
 if __name__ == "__main__":

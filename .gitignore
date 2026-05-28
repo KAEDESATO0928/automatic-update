@@ -6,3 +6,4 @@ page_html/
 screenshots/
 snapshots/
 inspect_*.py
+experiment_*.py
