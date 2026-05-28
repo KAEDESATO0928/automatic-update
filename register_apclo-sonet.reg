@@ -3,11 +3,7 @@ Windows Registry Editor Version 5.00
 ; apclo-sonet:// URLスキーム登録
 ; ダブルクリックして「はい」で実行（HKCU配下なので管理者権限不要）
 ;
-; 配置前提:
-;   - python.exe: C:\Users\owner\AppData\Local\Microsoft\WindowsApps\python.exe
-;   - main.py:    C:\AUTOET\automatic-update\main.py
-;
-; 環境が異なる場合はパスを編集してください
+; sonet-rpa.bat 経由で main.py を起動（Microsoft Store版 Python の sandbox 対策）
 
 [HKEY_CURRENT_USER\Software\Classes\apclo-sonet]
 @="URL:apclo Sonet RPA Protocol"
@@ -18,4 +14,4 @@ Windows Registry Editor Version 5.00
 [HKEY_CURRENT_USER\Software\Classes\apclo-sonet\shell\open]
 
 [HKEY_CURRENT_USER\Software\Classes\apclo-sonet\shell\open\command]
-@="\"C:\\Users\\owner\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe\" \"C:\\AUTOET\\automatic-update\\main.py\" \"%1\""
+@="\"C:\\AUTOET\\automatic-update\\sonet-rpa.bat\" \"%1\""
