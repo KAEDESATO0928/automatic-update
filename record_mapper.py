@@ -3,7 +3,10 @@
 import re
 from datetime import date
 
-SHINSETSU_ALIASES = {"新規入会", "新設", "新規開設"}
+# 新規 vs 事変/転用 判定は「事変番号F・T(11桁)」(文字列__1行__81) で行う:
+#   空欄  → 新規開設 → 処理OK
+#   値あり → 事変・転用 → 未対応エラー
+# （旧仕様の「申込区分」フィールドでの判定は廃止）
 
 # 現状回線: ホワイトリスト方式（記載以外はすべて「その他」）
 LINE_TYPE_COLLAB = {
@@ -19,6 +22,17 @@ BUILDING_MAP = {
     ("一戸建て", "賃貸"): "戸建(賃貸)",
     ("集合住宅", "持家"): "集合住宅(分譲)",
     ("集合住宅", "賃貸"): "集合住宅(賃貸)",
+}
+
+# 住居形態の表記揺れ吸収（kintone 側の表記差）
+DWELLING_ALIASES = {
+    "一戸建て": "一戸建て",
+    "戸建て": "一戸建て",
+    "戸建": "一戸建て",
+    "集合住宅": "集合住宅",
+    "MS": "集合住宅",
+    "ＭＳ": "集合住宅",
+    "マンション": "集合住宅",
 }
 
 # 申込プラン → コース基本部分（戸建/マンション）。東西は住所から後付け
@@ -145,8 +159,9 @@ def split_phone(phone: str) -> tuple[str, str, str]:
 
 
 def map_building_type(dwelling: str, ownership: str) -> str:
+    dwelling_norm = DWELLING_ALIASES.get(dwelling.strip(), dwelling.strip())
     ownership_norm = "持家" if ownership == "分譲" else ownership
-    key = (dwelling, ownership_norm)
+    key = (dwelling_norm, ownership_norm)
     if key not in BUILDING_MAP:
         raise MapError(f"住居形態の組み合わせ未対応: {dwelling!r} × {ownership!r}")
     return BUILDING_MAP[key]
@@ -239,9 +254,10 @@ def _validate_consistency(record: dict):
 
 def build_customer(record: dict) -> dict:
     """kintone レコード(JSON) → customer dict 変換"""
-    apply_type_raw = _v(record.get("文字列__1行__32"))
-    if apply_type_raw not in SHINSETSU_ALIASES:
-        raise MapError(f"未対応の申込区分: {apply_type_raw!r}（新設のみ対応）")
+    # 事変番号F・T(11桁) で 新規 vs 事変/転用 判定
+    jihen_no = _v(record.get("文字列__1行__81")).strip()
+    if jihen_no:
+        raise MapError(f"事変・転用は未対応です（事変番号F・T: {jihen_no!r}）。新規のみ自動入力できます。")
 
     _validate_consistency(record)
 
