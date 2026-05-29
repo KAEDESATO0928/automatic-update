@@ -7,6 +7,33 @@ echo  So-net Auto Entry RPA - Setup
 echo ============================================
 echo.
 
+REM Detect if running from a Temp folder (ZIP opened-not-extracted)
+echo %~dp0 | findstr /I /C:"\\Temp\\" >nul
+if not errorlevel 1 (
+    echo [X] This setup.bat is running from a Temp folder.
+    echo.
+    echo This usually means the ZIP was OPENED without being extracted.
+    echo.
+    echo Please:
+    echo   1. Close this window
+    echo   2. Right-click the ZIP file
+    echo   3. Choose "Extract All..." then click "Extract"
+    echo   4. Open the extracted folder
+    echo   5. Run setup.bat from there
+    echo.
+    pause
+    exit /b 1
+)
+echo %~dp0 | findstr /I /C:"\\AppData\\Local\\Temp\\" >nul
+if not errorlevel 1 (
+    echo [X] Running from Temp. Please extract the ZIP properly first.
+    pause
+    exit /b 1
+)
+
+echo Install location: %~dp0
+echo.
+
 echo [1/2] Installing Firefox (a few minutes)...
 python\python.exe -m playwright install firefox
 if errorlevel 1 (

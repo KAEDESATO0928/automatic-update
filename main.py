@@ -783,15 +783,12 @@ def step8b_portability(page: Page, row: dict):
 
 
 def _show_error(title: str, message: str):
-    """エラー表示: tkinterダイアログが使えなければprintのみ"""
+    """エラー表示: Windows MessageBox (ctypes、embedded Python でも動作)"""
     print(f"\n[ERROR] {title}: {message}", file=sys.stderr)
     try:
-        import tkinter as tk
-        from tkinter import messagebox
-        root = tk.Tk()
-        root.withdraw()
-        messagebox.showerror(title, message)
-        root.destroy()
+        import ctypes
+        # MB_ICONERROR (0x10) | MB_SYSTEMMODAL (0x1000)
+        ctypes.windll.user32.MessageBoxW(0, message, title, 0x10 | 0x1000)
     except Exception:
         pass
 
@@ -800,7 +797,7 @@ def _drive_one_customer(customer: dict, debug: bool = False):
     """1顧客を Firefox で処理してブラウザクローズまで待つ"""
     if not LOGIN_ID or not PASSWORD:
         _show_error("認証情報不足", ".env に SONET_LOGIN_ID と SONET_PASSWORD を設定してください。")
-        return
+        sys.exit(1)
 
     with sync_playwright() as p:
         browser = p.firefox.launch(headless=False, slow_mo=300)
@@ -841,13 +838,13 @@ def run_with_url(url: str, debug: bool = False):
         app_id, record_id = record_mapper.parse_url(url)
     except record_mapper.MapError as e:
         _show_error("URLパース失敗", str(e))
-        return
+        sys.exit(1)
 
     subdomain = os.getenv("KINTONE_SUBDOMAIN")
     token = os.getenv("KINTONE_API_TOKEN")
     if not subdomain or not token:
         _show_error("kintone設定不足", ".env に KINTONE_SUBDOMAIN / KINTONE_API_TOKEN を設定してください。")
-        return
+        sys.exit(1)
 
     print(f"kintone取得: app={app_id}, record={record_id}")
     client = kintone_client.KintoneClient(subdomain, token)
@@ -855,13 +852,13 @@ def run_with_url(url: str, debug: bool = False):
         record = client.get_record(app_id, record_id)
     except kintone_client.KintoneError as e:
         _show_error("kintone取得失敗", str(e))
-        return
+        sys.exit(1)
 
     try:
         customer = record_mapper.build_customer(record)
     except record_mapper.MapError as e:
         _show_error("レコード変換失敗", str(e))
-        return
+        sys.exit(1)
 
     print("[変換後 customer dict]")
     for k, v in customer.items():
