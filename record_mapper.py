@@ -314,6 +314,37 @@ def build_customer(record: dict) -> dict:
         "wireless_lan_card_1g": _v(record.get("ドロップダウン_32")),  # 〇/×
         "router_wifi7_10g": _v(record.get("ドロップダウン_56")),  # 〇/×
         "wireless_lan_10g": _v(record.get("ドロップダウン_57")),  # 〇/×
+        # 書類発送先住所（入会証送付先用、未記載なら同住所）
+        **_build_delivery_address(record),
+    }
+
+
+def _build_delivery_address(record: dict) -> dict:
+    """書類発送先住所フィールドを customer dict 用に整形。
+    文字列__1行__97 (書類発送先住所) が空なら has_delivery_address=False で
+    既存のメイン住所が UP2010 にも使われる。"""
+    delivery_addr_raw = _v(record.get("文字列__1行__97"))
+    if not delivery_addr_raw.strip():
+        return {
+            "has_delivery_address": False,
+            "delivery_postal_code1": "",
+            "delivery_postal_code2": "",
+            "delivery_town": "",
+            "delivery_banchi": "",
+            "delivery_go": "",
+            "delivery_building": "",
+            "delivery_room": "",
+        }
+    parsed = split_address(delivery_addr_raw)
+    return {
+        "has_delivery_address": True,
+        "delivery_postal_code1": _v(record.get("郵便番号前半_0")),
+        "delivery_postal_code2": _v(record.get("郵便番号後半_0")),
+        "delivery_town": parsed["town"] or delivery_addr_raw,
+        "delivery_banchi": parsed["banchi"],
+        "delivery_go": parsed["go"],
+        "delivery_building": _v(record.get("文字列__1行__98")),
+        "delivery_room": _v(record.get("文字列__1行__99")),
     }
 
 

@@ -88,10 +88,35 @@ def step2_agency_code(page: Page, row: dict):
 
 
 def step3_area_input(page: Page, row: dict):
-    """利用エリア入力（郵便番号）"""
+    """利用エリア入力（郵便番号 + 番ポあり時の固定電話番号）"""
     print("[3/9] 利用エリア入力中...")
     page.fill("#UP1020_zipCd1", row["postal_code1"])
     page.fill("#UP1020_zipCd2", row["postal_code2"])
+
+    # 番ポあり時、ご利用場所のNTT固定電話番号も入力
+    if row.get("phone_apply") == "番ポあり" and row.get("phone_existing_no"):
+        import re as _re
+        raw = _re.sub(r"\D", "", row.get("phone_existing_no", ""))
+        if len(raw) >= 10:
+            p1, p2, p3 = raw[:3], raw[3:6], raw[6:10]
+        else:
+            p1, p2, p3 = raw[:3], raw[3:6], raw[6:]
+        # 候補 ID をリストで持って存在するもので fill
+        for selectors in (
+            ("#UP1020_telNo1", "#UP1020_telNo2", "#UP1020_telNo3"),
+            ("#UP1020_useTel1", "#UP1020_useTel2", "#UP1020_useTel3"),
+            ("#UP1020_fixedTel1", "#UP1020_fixedTel2", "#UP1020_fixedTel3"),
+        ):
+            if page.locator(selectors[0]).count() > 0:
+                page.fill(selectors[0], p1)
+                page.fill(selectors[1], p2)
+                page.fill(selectors[2], p3)
+                print(f"  ✓ 固定電話番号入力: {p1}-{p2}-{p3} ({selectors[0]})")
+                break
+        else:
+            _save_page_html(page, "step3_phone_unknown")
+            print("  ⚠ 固定電話番号フィールド未特定。HTML保存。")
+
     click_and_wait(page, "#UISST0040_next")
     print("  → エリア入力完了")
 
@@ -272,9 +297,11 @@ def _configure_tv(page: Page, row: dict):
 def step5b_10g_router(page: Page, row: dict):
     """10Gコース時、UISST0230 の前に挟まる10ギガ対応ルーター選択画面 (UISST0070, form UIOPT4635)"""
     cur_url = page.url
-    if "UISST0070" not in cur_url:
-        return  # 10Gコース以外はこの画面は出ない
-    print("[5b] 10ギガ対応ルーター画面...")
+    # URLとフォーム要素の両方で 10G ルーター画面か判定
+    has_router_radio = page.locator("#UP9665_apply_nashi").count() > 0
+    if "UISST0070" not in cur_url or not has_router_radio:
+        return  # 10Gコース以外（or ルーター画面以外）はこの処理スキップ
+    print(f"[5b] 10ギガ対応ルーター画面... URL={cur_url}")
     want_wifi7 = row.get("router_wifi7_10g") == "〇"
     want_10g_wlan = row.get("wireless_lan_10g") == "〇"
 
@@ -347,12 +374,14 @@ def step6_option_service(page: Page, row: dict):
     print("[6/9] オプションサービス選択中...")
     print(f"  current URL: {page.url}")
 
-    # 1Gは UISST0230、10Gは UIOPT4635 で同じ form id="UISST0230" を持つ
-    if "UISST0230" not in page.url and "UIOPT4635" not in page.url:
+    # オプション選択画面か判定: UP1310_addOption JavaScript 関数の存在で確認
+    # （URLは1G/10G/その他フローで複数パターンあり: UISST0230, UIOPT4635, UISST0146 等）
+    has_addopt = page.evaluate("typeof UP1310_addOption") != "undefined"
+    if not has_addopt:
         page_id = page.url.rsplit("/", 1)[-1].split(".")[0]
         _save_page_html(page, f"unknown_{page_id}")
         screenshot(page, f"unknown_{page_id}")
-        print(f"  ⏸ 想定外URL ({page.url}): HTML保存して停止")
+        print(f"  ⏸ オプション画面でないURL ({page.url}): HTML保存して停止")
         page.wait_for_event("close", timeout=0)
         return
 
@@ -445,24 +474,41 @@ def step8_member_info(page: Page, row: dict):
     time.sleep(0.5)
     page.select_option("#UP2010_birthYearKind_Day", str(int(row["birth_day"])))
 
-    # 住所（入会証送付先）- 郵便番号から検索で自動入力
-    page.fill("#UP2010_usrAddrZipCd1", row["postal_code1"])
-    page.fill("#UP2010_usrAddrZipCd2", row["postal_code2"])
+    # 住所（入会証送付先 = UP2010）
+    # 書類発送先が記載されていれば書類発送先住所を、なければメイン住所を使用
+    has_delivery = row.get("has_delivery_address", False)
+    if has_delivery:
+        print("  書類発送先(別住所)を入会証送付先に使用")
+        zip1 = row["delivery_postal_code1"]
+        zip2 = row["delivery_postal_code2"]
+        addr_town = row["delivery_town"]
+        addr_banchi = row["delivery_banchi"]
+        addr_go = row["delivery_go"]
+        addr_building = row["delivery_building"]
+        addr_room = row["delivery_room"]
+    else:
+        zip1 = row["postal_code1"]
+        zip2 = row["postal_code2"]
+        addr_town = row.get("town", "")
+        addr_banchi = row.get("banchi", "")
+        addr_go = row.get("go", "")
+        addr_building = row.get("building", "")
+        addr_room = row.get("room", "")
+
+    page.fill("#UP2010_usrAddrZipCd1", zip1)
+    page.fill("#UP2010_usrAddrZipCd2", zip2)
     page.click("#UP2010_searchAddress")
     time.sleep(5)
 
     # 町名・番地 - 検索後に自動入力されるのを待ってから上書き
-    page.fill("#UP2010_usrAddrTownName", row.get("town", ""))
-    page.fill("#UP2010_usrAddrBlock1", row.get("banchi", ""))
-    page.fill("#UP2010_usrAddrBlock2", row.get("go", ""))
+    page.fill("#UP2010_usrAddrTownName", addr_town)
+    page.fill("#UP2010_usrAddrBlock1", addr_banchi)
+    page.fill("#UP2010_usrAddrBlock2", addr_go)
 
-    # マンション・ビル名、部屋番号
-    building = row.get("building", "")
-    if building:
-        page.fill("#UP2010_usrAddrBuildingName", building)
-    room = row.get("room", "")
-    if room:
-        page.fill("#UP2010_usrAddrRoomNo", room)
+    if addr_building:
+        page.fill("#UP2010_usrAddrBuildingName", addr_building)
+    if addr_room:
+        page.fill("#UP2010_usrAddrRoomNo", addr_room)
 
     # 連絡先電話番号
     page.fill("#UP2010_telNo1", row.get("phone1", ""))
@@ -507,11 +553,12 @@ def step8_member_info(page: Page, row: dict):
     # 新設: UP4311_*, 転用/事業者変更: UP4310_*
     addr_prefix = "UP4311" if is_shinsetsu else "UP4310"
 
-    # 「会員情報をコピー」ボタン
-    copy_btn = page.locator(f"#{addr_prefix}_copyUserAdrsInfo")
-    if copy_btn.count() > 0:
-        copy_btn.click()
-        time.sleep(2)
+    # 「会員情報をコピー」ボタン (書類発送先が異なる場合は使わない)
+    if not has_delivery:
+        copy_btn = page.locator(f"#{addr_prefix}_copyUserAdrsInfo")
+        if copy_btn.count() > 0:
+            copy_btn.click()
+            time.sleep(2)
 
     # 郵便番号を手動セット（フォールバック）
     page.evaluate(f"""(function() {{
@@ -569,21 +616,41 @@ def step8_member_info(page: Page, row: dict):
         }})()""")
         time.sleep(0.5)
 
-        # 値をコピー
-        page.evaluate(f"""(function() {{
-            function copyVal(srcId, dstId) {{
-                var s = document.getElementById(srcId);
-                var d = document.getElementById(dstId);
-                if (s && d) d.value = s.value;
-            }}
-            copyVal('UP2010_usrAddrPrfct', '{addr_prefix}_prfct');
-            copyVal('UP2010_usrAddrCityName', '{city_id}');
-            copyVal('UP2010_usrAddrTownName', '{sect_id}');
-            copyVal('UP2010_usrAddrBlock1', '{addr_prefix}_block1');
-            copyVal('UP2010_usrAddrBlock2', '{addr_prefix}_block2');
-            copyVal('UP2010_usrAddrBuildingName', '{addr_prefix}_buildingName');
-            copyVal('UP2010_usrAddrRoomNo', '{addr_prefix}_roomNo');
-        }})()""")
+        if has_delivery:
+            # 書類発送先 != 利用場所のケース: UP2010 は書類発送先になっているので
+            # UP4311 にはメイン住所(利用場所)を直接フィル
+            main_town = row.get("town", "")
+            main_banchi = row.get("banchi", "")
+            main_go = row.get("go", "")
+            main_building = row.get("building", "")
+            main_room = row.get("room", "")
+            page.evaluate(f"""(function() {{
+                function setVal(id, v) {{
+                    var e = document.getElementById(id);
+                    if (e) e.value = v;
+                }}
+                setVal('{sect_id}', {json.dumps(main_town)});
+                setVal('{addr_prefix}_block1', {json.dumps(main_banchi)});
+                setVal('{addr_prefix}_block2', {json.dumps(main_go)});
+                setVal('{addr_prefix}_buildingName', {json.dumps(main_building)});
+                setVal('{addr_prefix}_roomNo', {json.dumps(main_room)});
+            }})()""")
+        else:
+            # 同住所: UP2010 から UP4311 へコピー (既存通り)
+            page.evaluate(f"""(function() {{
+                function copyVal(srcId, dstId) {{
+                    var s = document.getElementById(srcId);
+                    var d = document.getElementById(dstId);
+                    if (s && d) d.value = s.value;
+                }}
+                copyVal('UP2010_usrAddrPrfct', '{addr_prefix}_prfct');
+                copyVal('UP2010_usrAddrCityName', '{city_id}');
+                copyVal('UP2010_usrAddrTownName', '{sect_id}');
+                copyVal('UP2010_usrAddrBlock1', '{addr_prefix}_block1');
+                copyVal('UP2010_usrAddrBlock2', '{addr_prefix}_block2');
+                copyVal('UP2010_usrAddrBuildingName', '{addr_prefix}_buildingName');
+                copyVal('UP2010_usrAddrRoomNo', '{addr_prefix}_roomNo');
+            }})()""")
         time.sleep(1)
 
     # 建物タイプ
