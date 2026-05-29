@@ -1,9 +1,28 @@
 (function () {
   'use strict';
 
-  kintone.events.on('app.record.detail.show', (event) => {
-    // 既に追加済みなら何もしない（再描画対策）
+  // ボタン表示を許可するグループコード
+  const ALLOWED_GROUP = 'Administrators';
+
+  kintone.events.on('app.record.detail.show', async (event) => {
+    // 重複生成防止
     if (document.getElementById('apclo-sonet-rpa-btn')) {
+      return event;
+    }
+
+    // 現在ログインしているユーザーの所属グループを取得
+    try {
+      const res = await kintone.api(
+        kintone.api.url('/v1/user/groups', true),
+        'GET',
+        { code: kintone.getLoginUser().code }
+      );
+      const groupCodes = (res.groups || []).map((g) => g.code);
+      if (!groupCodes.includes(ALLOWED_GROUP)) {
+        return event; // 対象グループ外ならボタン非表示
+      }
+    } catch (e) {
+      console.error('[So-net RPA] グループ取得失敗:', e);
       return event;
     }
 
@@ -18,11 +37,7 @@
       const appId = kintone.app.getId();
       const recordId = event.recordId;
       const url = `apclo-sonet://run?app=${appId}&record=${recordId}`;
-
-      // デバッグ表示（URLスキームハンドラ未登録時の動作確認用）
       console.log('[So-net RPA] Dispatch URL:', url);
-
-      // URLスキーム発火
       window.location.href = url;
     };
 
