@@ -1,4 +1,5 @@
 .env
+.env.test
 ET録画/
 __pycache__/
 *.pyc
