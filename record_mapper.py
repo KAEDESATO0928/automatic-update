@@ -284,6 +284,8 @@ def build_customer(record: dict) -> dict:
         "birth_year": by, "birth_month": bm, "birth_day": bd,
         "postal_code1": _v(record.get("郵便番号前半")),
         "postal_code2": _v(record.get("郵便番号後半")),
+        "pref": addr["pref"],
+        "city": addr["city"],
         "town": addr["town"] or addr_raw,
         "banchi": addr["banchi"],
         "go": addr["go"],

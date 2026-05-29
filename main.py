@@ -619,16 +619,37 @@ def step8_member_info(page: Page, row: dict):
         if has_delivery:
             # 書類発送先 != 利用場所のケース: UP2010 は書類発送先になっているので
             # UP4311 にはメイン住所(利用場所)を直接フィル
+            main_pref = row.get("pref", "")
+            main_city = row.get("city", "")
             main_town = row.get("town", "")
             main_banchi = row.get("banchi", "")
             main_go = row.get("go", "")
             main_building = row.get("building", "")
             main_room = row.get("room", "")
+            # 都道府県は SELECT なので select_option で label一致選択
+            if main_pref:
+                try:
+                    page.select_option(f"#{addr_prefix}_prfct", label=main_pref)
+                except Exception:
+                    # フォールバック: value で試す (select_option が label 不一致の場合)
+                    page.evaluate(f"""(function() {{
+                        var sel = document.getElementById('{addr_prefix}_prfct');
+                        if (sel) {{
+                            for (var i=0; i<sel.options.length; i++) {{
+                                if (sel.options[i].text === {json.dumps(main_pref)}) {{
+                                    sel.selectedIndex = i;
+                                    sel.dispatchEvent(new Event('change', {{bubbles:true}}));
+                                    break;
+                                }}
+                            }}
+                        }}
+                    }})()""")
             page.evaluate(f"""(function() {{
                 function setVal(id, v) {{
                     var e = document.getElementById(id);
                     if (e) e.value = v;
                 }}
+                setVal('{city_id}', {json.dumps(main_city)});
                 setVal('{sect_id}', {json.dumps(main_town)});
                 setVal('{addr_prefix}_block1', {json.dumps(main_banchi)});
                 setVal('{addr_prefix}_block2', {json.dumps(main_go)});
